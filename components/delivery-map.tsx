@@ -180,16 +180,30 @@ export const DeliveryMap = forwardRef<DeliveryMapRef, DeliveryMapProps>(
             font-size: 12px;
             cursor: pointer;
             transition: transform 0.2s ease;
+            position: relative;
+            z-index: 1;
           ">
             📍
           </div>
         `;
 
-        markerElement.addEventListener("mouseenter", () => {
-          markerElement.style.transform = "scale(1.1)";
+        // Correction du problème de hover
+        markerElement.addEventListener("mouseenter", (e) => {
+          e.stopPropagation();
+          const innerDiv = markerElement.querySelector("div") as HTMLElement;
+          if (innerDiv) {
+            innerDiv.style.transform = "scale(1.1)";
+            innerDiv.style.zIndex = "999";
+          }
         });
-        markerElement.addEventListener("mouseleave", () => {
-          markerElement.style.transform = "scale(1)";
+
+        markerElement.addEventListener("mouseleave", (e) => {
+          e.stopPropagation();
+          const innerDiv = markerElement.querySelector("div") as HTMLElement;
+          if (innerDiv) {
+            innerDiv.style.transform = "scale(1)";
+            innerDiv.style.zIndex = "1";
+          }
         });
 
         const marker = new window.maptilersdk.Marker({
@@ -199,9 +213,9 @@ export const DeliveryMap = forwardRef<DeliveryMapRef, DeliveryMapProps>(
           .addTo(mapInstanceRef.current);
 
         const popup = new window.maptilersdk.Popup({
-          offset: 25,
+          offset: [0, -35],
           closeButton: true,
-          closeOnClick: false,
+          closeOnClick: true,
         }).setHTML(`
           <div style="font-family: 'Urbanist', sans-serif; min-width: 200px; padding: 8px;">
             <strong style="color: #1f2937; font-size: 16px; display: block; margin-bottom: 8px;">
@@ -223,6 +237,21 @@ export const DeliveryMap = forwardRef<DeliveryMapRef, DeliveryMapProps>(
               🚚 Client disponible
             </div>
           </div>
+          <style>
+            .maplibregl-popup-close-button {
+              width: 24px !important;
+              height: 24px !important;
+              font-size: 18px !important;
+              font-weight: bold !important;
+              line-height: 20px !important;
+              transition: all 0.2s ease !important;
+            }
+            .maptilersdk-popup-close-button:hover {
+              background: rgba(239, 68, 68, 0.2) !important;
+              color: #dc2626 !important;
+              transform: scale(1.1) !important;
+            }
+          </style>
         `);
 
         marker.setPopup(popup);
