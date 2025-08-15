@@ -47,7 +47,6 @@ export function SidebarContent({
     setIsExpanded(true);
     setExpandTrigger(trigger || null);
 
-    // Focus sur l'élément approprié après l'animation
     if (trigger === "search") {
       setTimeout(() => {
         const searchInput = document.querySelector(
@@ -73,10 +72,8 @@ export function SidebarContent({
         isExpanded ? "w-80" : "w-16"
       }`}
     >
-      {/* Desktop Collapsed State */}
       {!isExpanded && (
         <div className="flex flex-col items-center py-6 gap-4">
-          {/* Search Icon */}
           <button
             onClick={() => handleExpand("search")}
             className="group p-3 bg-white/40 rounded-xl backdrop-blur-sm hover:bg-white/60 transition-colors"
@@ -87,10 +84,8 @@ export function SidebarContent({
         </div>
       )}
 
-      {/* Desktop Expanded State */}
       {isExpanded && (
         <>
-          {/* Header avec bouton fermer pour desktop */}
           <div className="flex items-center justify-between p-4 border-b border-white/20">
             <h2 className="text-lg font-semibold text-gray-800">Menu</h2>
             <button
@@ -102,7 +97,6 @@ export function SidebarContent({
             </button>
           </div>
 
-          {/* Search Section */}
           <div className="p-4">
             <div className="relative h-[44px]">
               <div className="relative h-[44px]">

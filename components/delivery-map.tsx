@@ -41,11 +41,10 @@ export const DeliveryMap = forwardRef<DeliveryMapRef, DeliveryMapProps>(
           mapInstanceRef.current.flyTo({
             center: [customer.longitude, customer.latitude],
             zoom: 16,
-            pitch: 90, // Vue 3D lors du focus
+            pitch: 90,
             duration: 1500,
           });
 
-          // Ouvrir le popup du marqueur
           if (marker) {
             marker.togglePopup();
           }
@@ -54,14 +53,12 @@ export const DeliveryMap = forwardRef<DeliveryMapRef, DeliveryMapProps>(
     }));
 
     useEffect(() => {
-      // Charger MapTiler CSS
       const cssLink = document.createElement("link");
       cssLink.rel = "stylesheet";
       cssLink.href =
         "https://cdn.maptiler.com/maptiler-sdk-js/v2.0.3/maptiler-sdk.css";
       document.head.appendChild(cssLink);
 
-      // Charger MapTiler SDK JS
       const maptilerScript = document.createElement("script");
       maptilerScript.src =
         "https://cdn.maptiler.com/maptiler-sdk-js/v2.0.3/maptiler-sdk.umd.js";
@@ -101,10 +98,8 @@ export const DeliveryMap = forwardRef<DeliveryMapRef, DeliveryMapProps>(
 
       console.log("Initializing MapTiler map...");
 
-      // Configurer la clé API
       window.maptilersdk.config.apiKey = maptilerApiKey;
 
-      // Créer la carte
       const map = new window.maptilersdk.Map({
         container: mapRef.current,
         style: `https://api.maptiler.com/maps/0198aaaf-2337-7c76-9595-11d180a7d752/style.json?key=${maptilerApiKey}`,
@@ -152,13 +147,11 @@ export const DeliveryMap = forwardRef<DeliveryMapRef, DeliveryMapProps>(
 
       console.log("Adding markers for", customers.length, "customers");
 
-      // Nettoyer les marqueurs existants
       customerMarkersRef.current.forEach((marker) => {
         marker.remove();
       });
       customerMarkersRef.current.clear();
 
-      // Créer les marqueurs pour chaque client
       const bounds = new window.maptilersdk.LngLatBounds();
 
       customers.forEach((customer, index) => {
@@ -169,7 +162,6 @@ export const DeliveryMap = forwardRef<DeliveryMapRef, DeliveryMapProps>(
           customer.longitude
         );
 
-        // Créer un élément DOM pour le marqueur personnalisé
         const markerElement = document.createElement("div");
         markerElement.className = "custom-customer-marker";
         markerElement.innerHTML = `
@@ -193,7 +185,6 @@ export const DeliveryMap = forwardRef<DeliveryMapRef, DeliveryMapProps>(
           </div>
         `;
 
-        // Animation hover
         markerElement.addEventListener("mouseenter", () => {
           markerElement.style.transform = "scale(1.1)";
         });
@@ -201,14 +192,12 @@ export const DeliveryMap = forwardRef<DeliveryMapRef, DeliveryMapProps>(
           markerElement.style.transform = "scale(1)";
         });
 
-        // Créer le marqueur
         const marker = new window.maptilersdk.Marker({
           element: markerElement,
         })
           .setLngLat([customer.longitude, customer.latitude])
           .addTo(mapInstanceRef.current);
 
-        // Créer le popup
         const popup = new window.maptilersdk.Popup({
           offset: 25,
           closeButton: true,
@@ -239,19 +228,17 @@ export const DeliveryMap = forwardRef<DeliveryMapRef, DeliveryMapProps>(
         marker.setPopup(popup);
         customerMarkersRef.current.set(customer.id, marker);
 
-        // Ajouter les coordonnées aux bounds
         bounds.extend([customer.longitude, customer.latitude]);
       });
 
       console.log("All markers added successfully");
 
-      // Ajuster la vue pour inclure tous les marqueurs
       if (customers.length > 0) {
         mapInstanceRef.current.fitBounds(bounds, {
           padding: 40,
           maxZoom: 15,
           zoom: 14,
-          pitch: 5, // Maintenir la vue 3D lors du fit bounds
+          pitch: 5,
         });
       }
     }, [customers, isMapInitialized]);
@@ -262,7 +249,6 @@ export const DeliveryMap = forwardRef<DeliveryMapRef, DeliveryMapProps>(
       <div className="w-full h-full relative">
         <div ref={mapRef} className="w-full h-full" />
 
-        {/* Overlay de chargement */}
         {isLoading && (
           <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-green-50 to-blue-50 z-10">
             <div className="text-center">
