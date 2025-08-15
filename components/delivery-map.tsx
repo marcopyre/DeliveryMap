@@ -24,13 +24,33 @@ declare global {
   }
 }
 
+// Cache global pour éviter de recharger MapTiler
+let mapTilerSDKCache: {
+  loaded: boolean;
+  loading: boolean;
+  callbacks: (() => void)[];
+} = {
+  loaded: false,
+  loading: false,
+  callbacks: [],
+};
+
+// Cache pour les instances de cartes
+const mapInstanceCache = new Map<string, any>();
+
+// Cache pour les styles de cartes
+const mapStyleCache = new Map<string, any>();
+
 export const DeliveryMap = forwardRef<DeliveryMapRef, DeliveryMapProps>(
   ({ customers, maptilerApiKey }, ref) => {
     const mapRef = useRef<HTMLDivElement>(null);
     const mapInstanceRef = useRef<any>(null);
-    const [isMapTilerLoaded, setIsMapTilerLoaded] = useState(false);
+    const [isMapTilerLoaded, setIsMapTilerLoaded] = useState(
+      mapTilerSDKCache.loaded
+    );
     const [isMapInitialized, setIsMapInitialized] = useState(false);
     const customerMarkersRef = useRef<Map<string, any>>(new Map());
+    const cacheKey = `map_${maptilerApiKey}`;
 
     useImperativeHandle(ref, () => ({
       focusOnCustomer: (customerId: string) => {
@@ -52,32 +72,75 @@ export const DeliveryMap = forwardRef<DeliveryMapRef, DeliveryMapProps>(
       },
     }));
 
-    useEffect(() => {
-      const cssLink = document.createElement("link");
-      cssLink.rel = "stylesheet";
-      cssLink.href =
-        "https://cdn.maptiler.com/maptiler-sdk-js/v2.0.3/maptiler-sdk.css";
-      document.head.appendChild(cssLink);
+    // Fonction pour charger MapTiler SDK avec cache
+    const loadMapTilerSDK = () => {
+      return new Promise<void>((resolve) => {
+        // Si déjà chargé, résoudre immédiatement
+        if (mapTilerSDKCache.loaded) {
+          resolve();
+          return;
+        }
 
-      const maptilerScript = document.createElement("script");
-      maptilerScript.src =
-        "https://cdn.maptiler.com/maptiler-sdk-js/v2.0.3/maptiler-sdk.umd.js";
-      maptilerScript.onload = () => {
-        console.log("MapTiler SDK loaded successfully");
-        setIsMapTilerLoaded(true);
-      };
-      maptilerScript.onerror = () => {
-        console.error("Failed to load MapTiler SDK");
-      };
-      document.head.appendChild(maptilerScript);
-
-      return () => {
-        [maptilerScript, cssLink].forEach((element) => {
-          if (document.head.contains(element)) {
-            document.head.removeChild(element);
-          }
+        // Ajouter le callback à la liste
+        mapTilerSDKCache.callbacks.push(() => {
+          resolve();
         });
-      };
+
+        // Si déjà en cours de chargement, ne pas recharger
+        if (mapTilerSDKCache.loading) {
+          return;
+        }
+
+        mapTilerSDKCache.loading = true;
+
+        // Vérifier si les éléments existent déjà
+        const existingCSS = document.querySelector(
+          'link[href*="maptiler-sdk.css"]'
+        );
+        const existingScript = document.querySelector(
+          'script[src*="maptiler-sdk.umd.js"]'
+        );
+
+        if (!existingCSS) {
+          const cssLink = document.createElement("link");
+          cssLink.rel = "stylesheet";
+          cssLink.href =
+            "https://cdn.maptiler.com/maptiler-sdk-js/v2.0.3/maptiler-sdk.css";
+          document.head.appendChild(cssLink);
+        }
+
+        if (!existingScript) {
+          const maptilerScript = document.createElement("script");
+          maptilerScript.src =
+            "https://cdn.maptiler.com/maptiler-sdk-js/v2.0.3/maptiler-sdk.umd.js";
+          maptilerScript.onload = () => {
+            console.log("MapTiler SDK loaded successfully");
+            mapTilerSDKCache.loaded = true;
+            mapTilerSDKCache.loading = false;
+
+            // Exécuter tous les callbacks en attente
+            mapTilerSDKCache.callbacks.forEach((callback) => callback());
+            mapTilerSDKCache.callbacks = [];
+          };
+          maptilerScript.onerror = () => {
+            console.error("Failed to load MapTiler SDK");
+            mapTilerSDKCache.loading = false;
+          };
+          document.head.appendChild(maptilerScript);
+        } else if (window.maptilersdk) {
+          // Script déjà présent et chargé
+          mapTilerSDKCache.loaded = true;
+          mapTilerSDKCache.loading = false;
+          mapTilerSDKCache.callbacks.forEach((callback) => callback());
+          mapTilerSDKCache.callbacks = [];
+        }
+      });
+    };
+
+    useEffect(() => {
+      loadMapTilerSDK().then(() => {
+        setIsMapTilerLoaded(true);
+      });
     }, []);
 
     useEffect(() => {
@@ -98,11 +161,28 @@ export const DeliveryMap = forwardRef<DeliveryMapRef, DeliveryMapProps>(
 
       console.log("Initializing MapTiler map...");
 
+      // Vérifier le cache d'instance
+      const cachedInstance = mapInstanceCache.get(cacheKey);
+      if (cachedInstance && cachedInstance.getContainer()) {
+        try {
+          // Réutiliser l'instance existante si possible
+          cachedInstance.setContainer(mapRef.current);
+          mapInstanceRef.current = cachedInstance;
+          setIsMapInitialized(true);
+          return;
+        } catch (e) {
+          // En cas d'erreur, supprimer du cache et créer une nouvelle instance
+          mapInstanceCache.delete(cacheKey);
+        }
+      }
+
       window.maptilersdk.config.apiKey = maptilerApiKey;
 
-      const map = new window.maptilersdk.Map({
+      const styleUrl = `https://api.maptiler.com/maps/0198aaaf-2337-7c76-9595-11d180a7d752/style.json?key=${maptilerApiKey}`;
+
+      // Vérifier le cache de style
+      let mapOptions: any = {
         container: mapRef.current,
-        style: `https://api.maptiler.com/maps/0198aaaf-2337-7c76-9595-11d180a7d752/style.json?key=${maptilerApiKey}`,
         center: [5.7245, 45.1885],
         language: "fr",
         zoom: 10,
@@ -112,22 +192,44 @@ export const DeliveryMap = forwardRef<DeliveryMapRef, DeliveryMapProps>(
         navigationControl: false,
         geolocateControl: false,
         logoControl: false,
-      });
+      };
+
+      if (mapStyleCache.has(styleUrl)) {
+        // Utiliser le style en cache
+        mapOptions.style = mapStyleCache.get(styleUrl);
+      } else {
+        mapOptions.style = styleUrl;
+      }
+
+      const map = new window.maptilersdk.Map(mapOptions);
 
       map.on("load", () => {
         console.log("Map loaded successfully");
+
+        // Mettre en cache le style une fois chargé
+        if (!mapStyleCache.has(styleUrl)) {
+          mapStyleCache.set(styleUrl, map.getStyle());
+        }
+
         setIsMapInitialized(true);
       });
 
+      // Mettre en cache l'instance
+      mapInstanceCache.set(cacheKey, map);
       mapInstanceRef.current = map;
 
       return () => {
-        if (mapInstanceRef.current) {
+        // Ne pas supprimer l'instance du cache, juste nettoyer les références
+        if (
+          mapInstanceRef.current &&
+          mapInstanceRef.current !== cachedInstance
+        ) {
+          // Seulement si c'est une nouvelle instance, pas celle en cache
           mapInstanceRef.current.remove();
-          mapInstanceRef.current = null;
         }
+        mapInstanceRef.current = null;
       };
-    }, [isMapTilerLoaded, maptilerApiKey]);
+    }, [isMapTilerLoaded, maptilerApiKey, cacheKey]);
 
     useEffect(() => {
       if (
@@ -187,7 +289,6 @@ export const DeliveryMap = forwardRef<DeliveryMapRef, DeliveryMapProps>(
           </div>
         `;
 
-        // Correction du problème de hover
         markerElement.addEventListener("mouseenter", (e) => {
           e.stopPropagation();
           const innerDiv = markerElement.querySelector("div") as HTMLElement;
@@ -224,18 +325,6 @@ export const DeliveryMap = forwardRef<DeliveryMapRef, DeliveryMapProps>(
             <div style="color: #6b7280; font-size: 13px; margin-bottom: 8px; line-height: 1.4;">
               📍 ${customer.address}
             </div>
-            <div style="
-              background: linear-gradient(135deg, #10B981 0%, #059669 100%);
-              color: white;
-              padding: 6px 12px;
-              border-radius: 20px;
-              font-size: 11px;
-              font-weight: 600;
-              text-align: center;
-              display: inline-block;
-            ">
-              🚚 Client disponible
-            </div>
           </div>
           <style>
             .maplibregl-popup-close-button {
@@ -245,11 +334,6 @@ export const DeliveryMap = forwardRef<DeliveryMapRef, DeliveryMapProps>(
               font-weight: bold !important;
               line-height: 20px !important;
               transition: all 0.2s ease !important;
-            }
-            .maptilersdk-popup-close-button:hover {
-              background: rgba(239, 68, 68, 0.2) !important;
-              color: #dc2626 !important;
-              transform: scale(1.1) !important;
             }
           </style>
         `);
@@ -283,7 +367,9 @@ export const DeliveryMap = forwardRef<DeliveryMapRef, DeliveryMapProps>(
             <div className="text-center">
               <div className="animate-spin rounded-full h-12 w-12 border-4 border-green-200 border-t-green-600 mx-auto mb-4"></div>
               <p className="text-gray-700 font-urbanist font-medium">
-                Chargement de MapTiler...
+                {mapTilerSDKCache.loaded
+                  ? "Initialisation de la carte..."
+                  : "Chargement de MapTiler..."}
               </p>
               <p className="text-gray-500 font-urbanist text-sm mt-1">
                 Chargement de la vue 3D terrain
